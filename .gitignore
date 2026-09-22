@@ -1,0 +1,28 @@
+# Environment variables / API keys
+.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated downloads
+downloads/
+
+# Uploaded files
+uploads/
+
+# Video/audio files
+*.webm
+*.mp4
+*.mp3
+*.wav
+*.m4a
+
+# VS Code
+.vscode/
+
+# Streamlit secrets
+.streamlit/secrets.toml
