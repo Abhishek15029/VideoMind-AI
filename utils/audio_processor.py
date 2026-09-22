@@ -1,8 +1,5 @@
 import os
-import stat
-import zipfile
-import urllib.request
-from pathlib import Path
+import shutil
 
 import yt_dlp
 from pydub import AudioSegment
@@ -13,73 +10,35 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
 # ============================================================
-# DENO SETUP
+# FIND DENO
 # ============================================================
 
-def setup_deno():
+def get_deno_path():
     """
-    Make sure Deno is available.
-    Works locally and on Streamlit Cloud.
+    Find Deno installed on the system.
     """
 
-    # Check if Deno is already installed
-    deno_path = "deno"
+    deno_path = shutil.which("deno")
 
-    try:
-        import shutil
+    if deno_path:
+        print(f"Deno found: {deno_path}")
+        return deno_path
 
-        existing_deno = shutil.which("deno")
+    # Common Streamlit/Linux location
+    possible_paths = [
+        "/usr/bin/deno",
+        "/usr/local/bin/deno",
+        "/home/appuser/.deno/bin/deno",
+        "/home/adminuser/.deno/bin/deno",
+    ]
 
-        if existing_deno:
-            print(f"Deno found: {existing_deno}")
-            return existing_deno
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"Deno found: {path}")
+            return path
 
-    except Exception:
-        pass
-
-    # Local/cache location for Streamlit Cloud
-    deno_dir = Path("/tmp/deno")
-    deno_exe = deno_dir / "deno"
-
-    if deno_exe.exists():
-        print(f"Deno found at: {deno_exe}")
-        return str(deno_exe)
-
-    print("Deno not found. Installing Deno...")
-
-    deno_dir.mkdir(parents=True, exist_ok=True)
-
-    zip_path = deno_dir / "deno.zip"
-
-    # Linux x86_64 binary used by Streamlit Cloud
-    deno_url = (
-        "https://github.com/denoland/deno/releases/latest/"
-        "download/deno-x86_64-unknown-linux-gnu.zip"
-    )
-
-    try:
-        urllib.request.urlretrieve(deno_url, zip_path)
-
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(deno_dir)
-
-        # Make executable
-        deno_exe.chmod(
-            deno_exe.stat().st_mode
-            | stat.S_IEXEC
-            | stat.S_IXGRP
-            | stat.S_IXOTH
-        )
-
-        zip_path.unlink(missing_ok=True)
-
-        print(f"Deno installed at: {deno_exe}")
-
-        return str(deno_exe)
-
-    except Exception as e:
-        print(f"Failed to install Deno: {e}")
-        raise
+    print("WARNING: Deno was not found.")
+    return None
 
 
 # ============================================================
@@ -88,31 +47,46 @@ def setup_deno():
 
 def download_youtube_audio(url: str) -> str:
 
-    deno_path = setup_deno()
-
     output_path = os.path.join(
         DOWNLOAD_DIR,
         "%(title)s.%(ext)s"
     )
 
-    ydl_opts = {
+    deno_path = get_deno_path()
 
-        # Audio
+    ydl_opts = {
         "format": "bestaudio*/best",
 
         "outtmpl": output_path,
 
-        # Use Deno for YouTube JavaScript challenges
+        "noplaylist": True,
+
+        "quiet": True,
+
+        # ----------------------------------------------------
+        # YouTube JavaScript runtime
+        # ----------------------------------------------------
+        #
+        # Correct yt-dlp Python API format:
+        #
+        # "deno": {
+        #     "path": "/path/to/deno"
+        # }
+        #
+        # ----------------------------------------------------
+
         "js_runtimes": {
-            "deno": deno_path
+            "deno": {
+                "path": deno_path
+            }
+        } if deno_path else {
+            "deno": {}
         },
 
-        # Allow yt-dlp to obtain EJS if required
-        "remote_components": {
-            "ejs": "github"
-        },
+        # ----------------------------------------------------
+        # Convert downloaded audio to WAV
+        # ----------------------------------------------------
 
-        # Convert to WAV
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -120,13 +94,6 @@ def download_youtube_audio(url: str) -> str:
                 "preferredquality": "192",
             }
         ],
-
-        "quiet": True,
-
-        "noplaylist": True,
-
-        # Avoid unnecessary playlist processing
-        "nocheckcertificate": True,
     }
 
     print("Downloading YouTube audio...")
@@ -175,7 +142,7 @@ def convert_to_wav(input_path: str) -> str:
 
 
 # ============================================================
-# AUDIO CHUNKING
+# CHUNK AUDIO
 # ============================================================
 
 def chunk_audio(
@@ -212,7 +179,7 @@ def chunk_audio(
 
 
 # ============================================================
-# MAIN INPUT PROCESSOR
+# MAIN PROCESSOR
 # ============================================================
 
 def process_input(source: str) -> list:
