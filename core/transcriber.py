@@ -73,7 +73,7 @@ def load_model():
 
         _model = whisper.load_model(
             WHISPER_MODEL,
-            device="cuda"
+            device="cpu"
         )
 
         print("Whisper model loaded on GPU.")
